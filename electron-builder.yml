@@ -1,0 +1,39 @@
+appId: com.omni.videodownloader
+productName: Omni Video Downloader
+
+directories:
+  buildResources: resources # 아이콘 경로
+
+files:
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!{.eslint*,prettier*}"
+  - "!README.md"
+  - dist
+  - dist-electron
+
+# 바이너리 포함
+extraResources:
+  - from: binaries
+    to: binaries
+    filter:
+      - "**/*"
+
+# [핵심] GitHub 주소 연결 (자동 업데이트용)
+publish:
+  provider: github
+  owner: thoven-jun
+  repo: omni-video-downloader
+
+mac:
+  target: dmg
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  category: public.app-category.utilities
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  identity: null
+  icon: resources/icon.png # 아까 넣은 아이콘 사용
+
+dmg:
+  title: ${productName} ${version}

@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* [추가] 토스트 애니메이션 */
+@keyframes slideInDown {
+  from {
+    transform: translate(-50%, -100%); /* 위에서 시작 */
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0); /* 제자리로 */
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-down {
+  animation: slideInDown 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* [추가] "프로그램" 느낌을 위한 스크롤 바운스 제거 및 스크롤바 디자인 */
+html, body {
+  overflow: hidden; /* 전체 페이지 스크롤 막기 */
+  height: 100%;
+  background-color: #111827; /* 배경색 통일 */
+}
+
+/* 스크롤바 커스터마이징 (더 얇고 세련되게) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #374151;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4B5563;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translate(-50%, 100%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
