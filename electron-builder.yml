@@ -10,8 +10,10 @@ files:
   - "!electron.vite.config.{js,ts,mjs,cjs}"
   - "!{.eslint*,prettier*}"
   - "!README.md"
-  - dist
-  - dist-electron
+  - "!node_modules" # node_modules 중 devDependencies 제외용 (자동 처리됨)
+  # 핵심 수정: electron-vite는 빌드 결과를 'out' 폴더에 넣습니다.
+  - out/**/*
+  - package.json
 
 # 바이너리 포함
 extraResources:
