@@ -21,6 +21,58 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "tree": "node update-folder-tree.js"
   },
+  "build": {
+    "appId": "com.thoven-jun.omni-video-downloader",
+    "productName": "Omni Video Downloader",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "icon": "resources/icon.png",
+      "extraFiles": [
+        "build/Click Me to Fix.command"
+      ]
+    },
+    "dmg": {
+      "title": "Omni Video Downloader Installer",
+      "background": "build/installer-bg.png",
+      "icon": "resources/icon.png",
+      "iconSize": 100,
+      "contents": [
+        {
+          "x": 130,
+          "y": 180,
+          "type": "file"
+        },
+        {
+          "x": 470,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 300,
+          "y": 320,
+          "type": "file",
+          "path": "build/Click Me to Fix.command"
+        }
+      ],
+      "window": {
+        "width": 600,
+        "height": 400
+      }
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "resources/icon.png"
+    }
+  },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
