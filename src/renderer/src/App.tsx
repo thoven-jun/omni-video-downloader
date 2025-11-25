@@ -51,6 +51,9 @@ function WrappedApp() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false); // 설정 모달 상태
+  
+  // [신규] 대기열 드로어 열림 상태 관리
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
 
   // 설정값 상태
   const [appSettings, setAppSettings] = useState({
@@ -231,25 +234,20 @@ function WrappedApp() {
   const handleDownload = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
     let targetFolder = '';
 
-    // 설정에서 '매번 묻기'가 켜져 있다면 폴더 선택창 띄우기
     if (appSettings.download.askLocation) {
       const selected = await window.api.selectFolder();
-      if (!selected) return; // 취소 시 중단
+      if (!selected) return;
       targetFolder = selected;
     } else {
-      // 기존 로직: 설정된 기본 경로 사용
       if (!downloadPath && appSettings.download.defaultPath) {
         setDownloadPath(appSettings.download.defaultPath);
       }
     }
     
     addQueueItem(options, 'waiting', targetFolder);
-    setVideoData(null);
-    setCurrentUrl('');
-    setStatus('idle');
+    // 화면 유지 (초기화 코드 제거됨)
   }
 
-  // [수정됨] 2. handleAddToQueue: 비동기로 변경 및 askLocation 확인 로직 추가
   const handleAddToQueue = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
     let targetFolder = '';
 
@@ -262,7 +260,6 @@ function WrappedApp() {
     addQueueItem(options, 'stopped', targetFolder);
   }
 
-  // [수정됨] 3. addQueueItem: folderPath 파라미터 추가 (선택적)
   const addQueueItem = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }, initialStatus: 'waiting' | 'stopped', folderPath?: string) => {
     if (!videoData) return;
     
@@ -273,7 +270,6 @@ function WrappedApp() {
       type: options.type,
       quality: options.quality === 'best' ? '최고화질' : options.quality,
       audioFormat: options.audioFormat,
-      // 전달받은 폴더가 있으면(folderPath) 우선 사용, 없으면 기존 로직(downloadPath 등) 사용
       folder: folderPath || downloadPath || appSettings.download.defaultPath || '', 
       url: currentUrl,
       status: initialStatus,
@@ -340,9 +336,7 @@ function WrappedApp() {
             )}
           </div>
           
-          {/* 우측 상단 버튼 그룹 (설정, 알림) */}
           <div className="pointer-events-auto flex items-center gap-2">
-            {/* [신규] 설정 버튼 */}
             <button 
               onClick={() => setIsSettingsOpen(true)}
               className="rounded-full bg-gray-800 p-2 text-gray-300 hover:bg-gray-700 hover:text-white transition shadow-lg"
@@ -373,6 +367,7 @@ function WrappedApp() {
           progress={progress}
           current={queue.length > 0 ? queue.length - queue.filter(q => q.status === 'waiting' || q.status === 'stopped').length : 0}
           total={queue.length}
+          isDrawerOpen={isQueueOpen} // [추가됨] 상태 전달
         />
 
         <div className="flex-1 flex flex-col items-center px-6 py-12 overflow-y-auto pb-40">
@@ -412,9 +407,10 @@ function WrappedApp() {
           editingId={editingId}
           setEditingId={setEditingId}
           onStartItem={handleStartItem}
+          isOpen={isQueueOpen} // [추가됨]
+          onToggle={setIsQueueOpen} // [추가됨]
         />
         
-        {/* [신규] 설정 모달 */}
         <SettingsModal 
           isOpen={isSettingsOpen} 
           onClose={() => setIsSettingsOpen(false)}

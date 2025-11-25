@@ -118,14 +118,20 @@ interface QueueDrawerProps {
   editingId: string | null
   setEditingId: (id: string | null) => void
   onStartItem: (id: string) => void
+  
+  // [수정됨] App에서 상태를 제어하기 위해 props 추가
+  isOpen: boolean
+  onToggle: (isOpen: boolean) => void
 }
 
 export function QueueDrawer({ 
   queue, history, onOpenFolder, onDeleteHistory, onClearHistory, onRemoveQueue, onDownloadAll, 
-  onUpdateItem, onSelectFolder, editingId, setEditingId, onStartItem
+  onUpdateItem, onSelectFolder, editingId, setEditingId, onStartItem,
+  isOpen, onToggle // [추가됨]
 }: QueueDrawerProps) {
   
-  const [isOpen, setIsOpen] = useState(false);
+  // [삭제됨] 내부 state 제거
+  // const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'queue' | 'history'>('queue');
 
   useEffect(() => {
@@ -149,32 +155,23 @@ export function QueueDrawer({
 
   const currentItems = activeTab === 'queue' ? queue : history;
 
-  const handleChangeItemFolder = async (id: string) => {
-    const newPath = await onSelectFolder();
-    if (newPath) {
-      onUpdateItem(id, { folder: newPath });
-    }
-  }
-
   return (
-    // [수정] transition-[height] duration-300 ease-in-out 추가!
-    // 이제 드로어 높이가 0.3초 동안 부드럽게 변하며, 창이 늘어나는 속도와 싱크를 맞춥니다.
     <div className={`fixed bottom-0 left-0 right-0 z-30 flex flex-col bg-gray-900 border-t border-gray-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-[height] duration-500 ease-out ${getHeightClass()}`}>
       
       {/* 헤더 */}
       <div 
         className="flex h-12 shrink-0 items-center justify-between bg-gray-800 px-0 select-none cursor-pointer hover:bg-gray-750 transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => onToggle(!isOpen)} // [수정됨] prop 호출
       >
         <div className="flex h-full" onClick={(e) => e.stopPropagation()}>
           <button 
-            onClick={() => { setActiveTab('queue'); setIsOpen(true); }}
+            onClick={() => { setActiveTab('queue'); onToggle(true); }} // [수정됨] prop 호출
             className={`flex items-center gap-2 px-8 text-sm font-bold transition-colors ${activeTab === 'queue' ? 'bg-gray-700 text-blue-400 border-t-2 border-blue-400' : 'text-gray-500 hover:bg-gray-750'}`}
           >
             <ListVideo size={18} /> 대기열 ({queue.length})
           </button>
           <button 
-            onClick={() => { setActiveTab('history'); setIsOpen(true); }}
+            onClick={() => { setActiveTab('history'); onToggle(true); }} // [수정됨] prop 호출
             className={`flex items-center gap-2 px-8 text-sm font-bold transition-colors ${activeTab === 'history' ? 'bg-gray-700 text-green-400 border-t-2 border-green-400' : 'text-gray-500 hover:bg-gray-750'}`}
           >
             <Clock size={18} /> 기록 ({history.length})

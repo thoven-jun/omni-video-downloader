@@ -1,5 +1,3 @@
-// src/renderer/src/components/FloatingStatus.tsx
-
 import { Loader2 } from 'lucide-react'
 
 interface FloatingStatusProps {
@@ -8,13 +6,20 @@ interface FloatingStatusProps {
   progress: number
   total: number
   current: number
+  isDrawerOpen?: boolean // [추가됨] 드로어 열림 상태
 }
 
-export function FloatingStatus({ isDownloading, title, progress, total, current }: FloatingStatusProps) {
+export function FloatingStatus({ isDownloading, title, progress, total, current, isDrawerOpen }: FloatingStatusProps) {
   if (!isDownloading) return null;
 
   return (
-    <div className="fixed bottom-14 left-1/2 z-20 w-[90%] max-w-2xl -translate-x-1/2 transform animate-slide-in-up">
+    // [수정됨] 
+    // 1. z-50 유지
+    // 2. bottom-14 (기본) vs bottom-[340px] (드로어 열림) 조건부 클래스 적용
+    // 3. transition-all로 부드러운 이동 효과
+    <div 
+      className={`fixed left-1/2 z-50 w-[90%] max-w-2xl -translate-x-1/2 transform transition-all duration-500 ease-out ${isDrawerOpen ? 'bottom-[340px]' : 'bottom-14'}`}
+    >
       <div className="rounded-xl bg-gray-800/90 p-4 shadow-2xl backdrop-blur-md ring-1 ring-blue-500/30">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3 overflow-hidden">
