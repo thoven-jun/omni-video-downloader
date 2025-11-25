@@ -39,29 +39,29 @@
       "title": "Omni Video Downloader Installer",
       "background": "build/installer-bg.png",
       "icon": "resources/icon.png",
-      "iconSize": 100,
+      "iconSize": 120, 
       "contents": [
         {
-          "x": 130,
-          "y": 180,
+          "x": 200,
+          "y": 200,
           "type": "file"
         },
         {
-          "x": 470,
-          "y": 180,
+          "x": 600,
+          "y": 200,
           "type": "link",
           "path": "/Applications"
         },
         {
-          "x": 300,
-          "y": 320,
+          "x": 400,
+          "y": 380,
           "type": "file",
           "path": "build/Click Me to Fix.command"
         }
       ],
       "window": {
-        "width": 600,
-        "height": 400
+        "width": 800,
+        "height": 500
       }
     },
     "win": {
