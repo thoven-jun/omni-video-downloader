@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
+  // [신규] 설정 관련 API
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSetting: (key: string, value: any) => ipcRenderer.invoke('set-setting', key, value),
+  setSettings: (settings: any) => ipcRenderer.invoke('set-settings', settings),
+  resetSettings: () => ipcRenderer.invoke('reset-settings'),
+
   // 1. 영상 정보 가져오기
   getVideoInfo: (url: string) => ipcRenderer.invoke('get-video-info', url),
   

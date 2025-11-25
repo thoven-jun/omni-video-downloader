@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { getVideoMetadata } from './downloader'
 import { setupDownloadHandler } from './downloadHandler'
+import { setupStoreHandlers } from './store';
 
 function createWindow(): void {
   // 화면 크기 감지 및 초기 사이즈 설정
@@ -115,6 +116,8 @@ app.whenReady().then(() => {
     const win = BrowserWindow.getFocusedWindow();
     win?.webContents.send('update-downloaded');
   });
+
+  setupStoreHandlers();
 
   ipcMain.handle('get-video-info', async (_, url: string) => {
     try {

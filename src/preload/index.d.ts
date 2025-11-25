@@ -22,6 +22,10 @@ declare global {
       onUpdateAvailable: (callback: () => void) => () => void
       onUpdateDownloaded: (callback: () => void) => () => void
       quitAndInstall: () => Promise<void>
+      getSettings: () => Promise<any>
+      setSetting: (key: string, value: any) => Promise<boolean>
+      setSettings: (settings: any) => Promise<boolean>
+      resetSettings: () => Promise<any>
     }
   }
 }

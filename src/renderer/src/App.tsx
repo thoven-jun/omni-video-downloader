@@ -5,7 +5,8 @@ import { NotificationSidebar, NotificationItem } from './components/Notification
 import { QueueDrawer, MediaItem } from './components/QueueDrawer'
 import { Sidebar } from './components/Sidebar'
 import { FloatingStatus } from './components/FloatingStatus'
-import { CheckCircle, AlertCircle, X, Bell, PanelLeft } from 'lucide-react'
+import { SettingsModal } from './components/SettingsModal'
+import { CheckCircle, AlertCircle, X, Bell, PanelLeft, Settings } from 'lucide-react'
 
 // Toast 컴포넌트
 function Toast({ message, visible, onClose, onOpenFolder }: { message: string, visible: boolean, onClose: () => void, onOpenFolder: () => void }) {
@@ -49,6 +50,38 @@ function WrappedApp() {
   
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // 설정 모달 상태
+
+  // 설정값 상태
+  const [appSettings, setAppSettings] = useState({
+    general: { notifications: true },
+    download: { defaultPath: '', defaultQuality: 'best', askLocation: false }
+  });
+
+  // 앱 시작 시 설정 불러오기
+  useEffect(() => {
+    const initSettings = async () => {
+      const settings = await window.api.getSettings();
+      if (settings) {
+        setAppSettings(settings);
+        // 저장된 기본 경로가 있으면 바로 적용
+        if (settings.download.defaultPath) {
+          setDownloadPath(settings.download.defaultPath);
+        }
+      }
+    };
+    initSettings();
+  }, []);
+
+  // 설정 변경 핸들러
+  const handleSettingsChanged = (newSettings: any) => {
+    setAppSettings(newSettings);
+    // 경로 변경 즉시 반영
+    if (newSettings.download.defaultPath) {
+      setDownloadPath(newSettings.download.defaultPath);
+    }
+  };
+
   const [recentAnalysis, setRecentAnalysis] = useState<any[]>(() => {
     const saved = localStorage.getItem('recent_analysis')
     return saved ? JSON.parse(saved) : []
@@ -68,25 +101,21 @@ function WrappedApp() {
   }
   const deleteNotification = (id: string) => setNotifications(prev => prev.filter(item => item.id !== id))
 
-  // [신규] 업데이트 감지 리스너
+  // 업데이트 감지 리스너
   useEffect(() => {
     const removeUpdateListener = window.api.onUpdateAvailable(() => {
-      // 1. 알림 센터에 메시지 추가
       addNotification('info', '새로운 버전이 있습니다! 다운로드 페이지를 확인하세요.');
       
-      // 2. 사용자에게 팝업으로 묻기
       const confirmUpdate = confirm("새로운 버전이 출시되었습니다! \n다운로드 페이지로 이동하시겠습니까?");
       
       if (confirmUpdate) {
-        // 3. 확인을 누르면 깃허브 릴리즈 페이지 열기
-        // (아래 주소를 기획자님의 실제 리포지토리 주소로 바꿔주세요!)
         window.open('https://github.com/thoven-jun/omni-video-downloader/releases');
       }
     });
 
     return () => { removeUpdateListener(); }
   }, []);
-  
+
   useEffect(() => {
     const removeProgressListener = window.api.onDownloadProgress(setProgress)
     return () => { removeProgressListener() }
@@ -199,9 +228,44 @@ function WrappedApp() {
     }
   }
 
-  // 내부용 큐 추가 함수 (status 지정 가능)
-  const addQueueItem = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }, initialStatus: 'waiting' | 'stopped') => {
+  const handleDownload = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
+    let targetFolder = '';
+
+    // 설정에서 '매번 묻기'가 켜져 있다면 폴더 선택창 띄우기
+    if (appSettings.download.askLocation) {
+      const selected = await window.api.selectFolder();
+      if (!selected) return; // 취소 시 중단
+      targetFolder = selected;
+    } else {
+      // 기존 로직: 설정된 기본 경로 사용
+      if (!downloadPath && appSettings.download.defaultPath) {
+        setDownloadPath(appSettings.download.defaultPath);
+      }
+    }
+    
+    addQueueItem(options, 'waiting', targetFolder);
+    setVideoData(null);
+    setCurrentUrl('');
+    setStatus('idle');
+  }
+
+  // [수정됨] 2. handleAddToQueue: 비동기로 변경 및 askLocation 확인 로직 추가
+  const handleAddToQueue = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
+    let targetFolder = '';
+
+    if (appSettings.download.askLocation) {
+      const selected = await window.api.selectFolder();
+      if (!selected) return;
+      targetFolder = selected;
+    }
+
+    addQueueItem(options, 'stopped', targetFolder);
+  }
+
+  // [수정됨] 3. addQueueItem: folderPath 파라미터 추가 (선택적)
+  const addQueueItem = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }, initialStatus: 'waiting' | 'stopped', folderPath?: string) => {
     if (!videoData) return;
+    
     const newItem: MediaItem = {
       id: Date.now().toString(),
       title: videoData.title,
@@ -209,9 +273,11 @@ function WrappedApp() {
       type: options.type,
       quality: options.quality === 'best' ? '최고화질' : options.quality,
       audioFormat: options.audioFormat,
-      folder: downloadPath || '', 
+      // 전달받은 폴더가 있으면(folderPath) 우선 사용, 없으면 기존 로직(downloadPath 등) 사용
+      folder: folderPath || downloadPath || appSettings.download.defaultPath || '', 
       url: currentUrl,
-      status: initialStatus
+      status: initialStatus,
+      resolutions: videoData.resolutions
     }
     setQueue(prev => [...prev, newItem])
     if (initialStatus === 'stopped') {
@@ -219,19 +285,6 @@ function WrappedApp() {
     } else {
       addNotification('info', '다운로드 대기열에 추가되었습니다.')
     }
-  }
-
-  // [수정] 파란 버튼 -> 즉시 시작 (waiting)
-  const handleDownload = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
-    addQueueItem(options, 'waiting');
-    setVideoData(null);
-    setCurrentUrl('');
-    setStatus('idle');
-  }
-
-  // [수정] 회색 버튼 -> 멈춤 상태로 추가 (stopped)
-  const handleAddToQueue = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
-    addQueueItem(options, 'stopped');
   }
 
   const handleUpdateQueueItem = (id: string, updates: Partial<MediaItem>) => {
@@ -286,10 +339,23 @@ function WrappedApp() {
               </button>
             )}
           </div>
-          <button onClick={() => setIsSidebarOpen(true)} className="relative rounded-full bg-gray-800 p-2 text-gray-300 hover:bg-gray-700 hover:text-white transition shadow-lg pointer-events-auto">
-            <Bell size={20} />
-            {notifications.length > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold">{notifications.length}</span>}
-          </button>
+          
+          {/* 우측 상단 버튼 그룹 (설정, 알림) */}
+          <div className="pointer-events-auto flex items-center gap-2">
+            {/* [신규] 설정 버튼 */}
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="rounded-full bg-gray-800 p-2 text-gray-300 hover:bg-gray-700 hover:text-white transition shadow-lg"
+              title="설정"
+            >
+              <Settings size={20} />
+            </button>
+
+            <button onClick={() => setIsSidebarOpen(true)} className="relative rounded-full bg-gray-800 p-2 text-gray-300 hover:bg-gray-700 hover:text-white transition shadow-lg">
+              <Bell size={20} />
+              {notifications.length > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold">{notifications.length}</span>}
+            </button>
+          </div>
         </div>
 
         <NotificationSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} notifications={notifications} onClear={() => setNotifications([])} onDelete={deleteNotification} />
@@ -324,7 +390,7 @@ function WrappedApp() {
                 data={videoData} 
                 onDownload={handleDownload} 
                 onAddToQueue={handleAddToQueue} 
-                downloadPath={downloadPath}
+                downloadPath={downloadPath || appSettings.download.defaultPath}
                 onChangePath={handleChangeFolder}
               />
             </div>
@@ -346,6 +412,13 @@ function WrappedApp() {
           editingId={editingId}
           setEditingId={setEditingId}
           onStartItem={handleStartItem}
+        />
+        
+        {/* [신규] 설정 모달 */}
+        <SettingsModal 
+          isOpen={isSettingsOpen} 
+          onClose={() => setIsSettingsOpen(false)}
+          onSettingsChanged={handleSettingsChanged}
         />
         
       </div>
