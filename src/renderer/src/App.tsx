@@ -8,11 +8,19 @@ import { FloatingStatus } from './components/FloatingStatus'
 import { SettingsModal } from './components/SettingsModal'
 import { CheckCircle, AlertCircle, X, Bell, PanelLeft, Settings } from 'lucide-react'
 
-// Toast 컴포넌트
+// [수정됨] Toast: 등장/퇴장 애니메이션 로직 추가
 function Toast({ message, visible, onClose, onOpenFolder }: { message: string, visible: boolean, onClose: () => void, onOpenFolder: () => void }) {
-  if (!visible) return null;
+  const [shouldRender, setShouldRender] = useState(visible);
+
+  useEffect(() => {
+    if (visible) setShouldRender(true);
+    else setTimeout(() => setShouldRender(false), 300); // 0.3초 애니메이션 대기 후 언마운트
+  }, [visible]);
+
+  if (!shouldRender) return null;
+
   return (
-    <div className="fixed top-6 left-1/2 z-50 flex -translate-x-1/2 transform items-center gap-4 rounded-xl bg-gray-800/90 px-6 py-4 shadow-2xl backdrop-blur-md ring-1 ring-white/10 transition-all animate-slide-in-down">
+    <div className={`fixed top-6 left-1/2 z-50 flex -translate-x-1/2 transform items-center gap-4 rounded-xl bg-gray-800/90 px-6 py-4 shadow-2xl backdrop-blur-md ring-1 ring-white/10 transition-all duration-300 ease-in-out ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/20 text-green-400"><CheckCircle size={20} /></div>
         <div className="flex flex-col"><span className="text-sm font-bold text-white">작업 완료!</span><span className="text-xs text-gray-400">{message}</span></div>
@@ -30,7 +38,7 @@ let hasCheckedClipboard = false;
 function App() { return <WrappedApp /> }
 
 function WrappedApp() {
-  const [currentUrl, setCurrentUrl] = useState('')
+  const [currentUrl, setCurrentUrl] = useState('') // 이제 InputArea와 값이 동기화됨
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [videoData, setVideoData] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState('')
@@ -50,24 +58,44 @@ function WrappedApp() {
   
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // 설정 모달 상태
-  
-  // [신규] 대기열 드로어 열림 상태 관리
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
 
-  // 설정값 상태
   const [appSettings, setAppSettings] = useState({
     general: { notifications: true },
     download: { defaultPath: '', defaultQuality: 'best', askLocation: false }
   });
 
-  // 앱 시작 시 설정 불러오기
+  // [신규] 스마트 붙여넣기 (Paste-to-Analyze)
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      // 1. 입력창(input/textarea)에 포커스가 있으면 가로채지 않음 (기본 붙여넣기 허용)
+      const activeElement = document.activeElement;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      // 2. 클립보드 텍스트 확인
+      const text = e.clipboardData?.getData('text') || await navigator.clipboard.readText();
+      
+      // 3. 지원하는 URL인지 검사 후 자동 분석 실행
+      if (text && (text.includes('youtube.com') || text.includes('youtu.be') || text.includes('instagram.com') || text.includes('tiktok.com'))) {
+        e.preventDefault(); 
+        addNotification('info', '링크를 감지하여 자동으로 분석합니다.');
+        setCurrentUrl(text); // 입력창에 텍스트 표시
+        handleAnalyze(text); // 분석 시작
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, []); // 의존성 배열 비움 (마운트 시 1회 등록)
+
   useEffect(() => {
     const initSettings = async () => {
       const settings = await window.api.getSettings();
       if (settings) {
         setAppSettings(settings);
-        // 저장된 기본 경로가 있으면 바로 적용
         if (settings.download.defaultPath) {
           setDownloadPath(settings.download.defaultPath);
         }
@@ -76,10 +104,8 @@ function WrappedApp() {
     initSettings();
   }, []);
 
-  // 설정 변경 핸들러
   const handleSettingsChanged = (newSettings: any) => {
     setAppSettings(newSettings);
-    // 경로 변경 즉시 반영
     if (newSettings.download.defaultPath) {
       setDownloadPath(newSettings.download.defaultPath);
     }
@@ -104,18 +130,14 @@ function WrappedApp() {
   }
   const deleteNotification = (id: string) => setNotifications(prev => prev.filter(item => item.id !== id))
 
-  // 업데이트 감지 리스너
   useEffect(() => {
     const removeUpdateListener = window.api.onUpdateAvailable(() => {
       addNotification('info', '새로운 버전이 있습니다! 다운로드 페이지를 확인하세요.');
-      
       const confirmUpdate = confirm("새로운 버전이 출시되었습니다! \n다운로드 페이지로 이동하시겠습니까?");
-      
       if (confirmUpdate) {
         window.open('https://github.com/thoven-jun/omni-video-downloader/releases');
       }
     });
-
     return () => { removeUpdateListener(); }
   }, []);
 
@@ -124,11 +146,9 @@ function WrappedApp() {
     return () => { removeProgressListener() }
   }, [])
 
-  // 큐 처리기
   useEffect(() => {
     if (isProcessing) return;
     const nextItem = queue.find(item => item.status === 'waiting');
-    
     if (nextItem && nextItem.id !== editingId) {
       processNextItem(nextItem);
     }
@@ -149,6 +169,11 @@ function WrappedApp() {
             setLastSavedPath(savedFile);
             addToHistory(item.title, item.thumbnail, savedFile, item.type);
             addNotification('success', `다운로드 완료: ${item.title}`);
+            
+            // 토스트 표시 (애니메이션 적용됨)
+            setShowToast(true);
+            setTimeout(() => setShowToast(false), 4000);
+
             setQueue(prev => prev.filter(q => q.id !== item.id));
             resolve();
           } else {
@@ -233,7 +258,6 @@ function WrappedApp() {
 
   const handleDownload = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
     let targetFolder = '';
-
     if (appSettings.download.askLocation) {
       const selected = await window.api.selectFolder();
       if (!selected) return;
@@ -243,26 +267,21 @@ function WrappedApp() {
         setDownloadPath(appSettings.download.defaultPath);
       }
     }
-    
     addQueueItem(options, 'waiting', targetFolder);
-    // 화면 유지 (초기화 코드 제거됨)
   }
 
   const handleAddToQueue = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
     let targetFolder = '';
-
     if (appSettings.download.askLocation) {
       const selected = await window.api.selectFolder();
       if (!selected) return;
       targetFolder = selected;
     }
-
     addQueueItem(options, 'stopped', targetFolder);
   }
 
   const addQueueItem = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }, initialStatus: 'waiting' | 'stopped', folderPath?: string) => {
     if (!videoData) return;
-    
     const newItem: MediaItem = {
       id: Date.now().toString(),
       title: videoData.title,
@@ -326,7 +345,6 @@ function WrappedApp() {
       />
 
       <div className="flex-1 flex flex-col relative overflow-hidden">
-        
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 py-4 pointer-events-none">
           <div className="pointer-events-auto">
             {!isLeftSidebarOpen && (
@@ -344,7 +362,6 @@ function WrappedApp() {
             >
               <Settings size={20} />
             </button>
-
             <button onClick={() => setIsSidebarOpen(true)} className="relative rounded-full bg-gray-800 p-2 text-gray-300 hover:bg-gray-700 hover:text-white transition shadow-lg">
               <Bell size={20} />
               {notifications.length > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold">{notifications.length}</span>}
@@ -367,7 +384,7 @@ function WrappedApp() {
           progress={progress}
           current={queue.length > 0 ? queue.length - queue.filter(q => q.status === 'waiting' || q.status === 'stopped').length : 0}
           total={queue.length}
-          isDrawerOpen={isQueueOpen} // [추가됨] 상태 전달
+          isDrawerOpen={isQueueOpen} 
         />
 
         <div className="flex-1 flex flex-col items-center px-6 py-12 overflow-y-auto pb-40">
@@ -375,7 +392,13 @@ function WrappedApp() {
             <h1 className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-4xl font-black text-transparent mb-2">Omni Video Downloader</h1>
           </div>
 
-          <InputArea onAnalyze={handleAnalyze} isLoading={status === 'loading'} />
+          <InputArea 
+            onAnalyze={handleAnalyze} 
+            isLoading={status === 'loading'} 
+            // [수정] App의 상태를 주입하여 동기화
+            value={currentUrl}
+            onChange={setCurrentUrl}
+          />
 
           {(status === 'error') && <div className="mt-6 flex items-center gap-2 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-400 ring-1 ring-red-500/50"><AlertCircle size={16} /> {errorMsg}</div>}
 
@@ -407,8 +430,8 @@ function WrappedApp() {
           editingId={editingId}
           setEditingId={setEditingId}
           onStartItem={handleStartItem}
-          isOpen={isQueueOpen} // [추가됨]
-          onToggle={setIsQueueOpen} // [추가됨]
+          isOpen={isQueueOpen} 
+          onToggle={setIsQueueOpen} 
         />
         
         <SettingsModal 

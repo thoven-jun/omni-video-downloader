@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app } from 'electron';
+import { ipcMain, BrowserWindow, app, Notification } from 'electron';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
@@ -135,6 +135,12 @@ export const setupDownloadHandler = (mainWindow: BrowserWindow) => {
 
     process.on('close', (code) => {
       if (code === 0) {
+        new Notification({
+          title: '다운로드 완료',
+          body: `${title} 파일이 저장되었습니다.`,
+          silent: false //소리 켜기
+        }).show();
+
         // 성공 시 '실제 저장된 파일 경로'를 보냅니다.
         // (참고: yt-dlp가 병합 과정에서 파일명을 바꿀 수도 있지만, -o로 지정했으므로 대부분 일치합니다)
         
@@ -146,6 +152,11 @@ export const setupDownloadHandler = (mainWindow: BrowserWindow) => {
           filePath: finalFilePath || downloadFolder 
         });
       } else {
+        new Notification({
+          title: '다운로드 실패',
+          body: `${title} 다운로드 중 오류가 발생했습니다.`,
+        }).show();
+
         mainWindow.webContents.send('download-complete', { 
           success: false, 
           error: `다운로드 실패 (Exit code: ${code})` 
