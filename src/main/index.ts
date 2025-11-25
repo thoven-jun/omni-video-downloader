@@ -8,6 +8,33 @@ import { getVideoMetadata } from './downloader'
 import { setupDownloadHandler } from './downloadHandler'
 import { setupStoreHandlers } from './store';
 
+// [신규] 바이너리 파일 실행 권한 강제 부여 함수 (EACCES 오류 해결)
+function fixBinaryPermissions() {
+  // 권한을 부여할 바이너리 목록
+  const binaries = ['yt-dlp', 'ffmpeg'];
+  
+  binaries.forEach((binaryName) => {
+    try {
+      let binPath = '';
+      
+      // 개발 모드와 배포 모드 경로 구분
+      if (is.dev) {
+        binPath = join(process.cwd(), 'binaries', binaryName);
+      } else {
+        binPath = join(process.resourcesPath, 'binaries', binaryName);
+      }
+
+      // 파일이 존재하면 실행 권한(755) 부여
+      if (fs.existsSync(binPath)) {
+        fs.chmodSync(binPath, 0o755);
+        console.log(`[Permission Fixed] ${binaryName} permission set to 755`);
+      }
+    } catch (error) {
+      console.error(`[Permission Error] Failed to fix permissions for ${binaryName}:`, error);
+    }
+  });
+}
+
 function createWindow(): void {
   // 화면 크기 감지 및 초기 사이즈 설정
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -86,6 +113,9 @@ function createWindow(): void {
       autoUpdater.checkForUpdatesAndNotify();
     }
   });
+  
+  // [중요] 다운로드 핸들러 연결 전에 권한 복구 실행
+  fixBinaryPermissions();
 
   setupDownloadHandler(mainWindow);
 }
