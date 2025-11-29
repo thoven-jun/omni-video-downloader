@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { InputArea } from './components/InputArea'
 import { MediaCard } from './components/MediaCard'
 import { NotificationSidebar, NotificationItem } from './components/NotificationSidebar'
@@ -8,7 +8,7 @@ import { FloatingStatus } from './components/FloatingStatus'
 import { SettingsModal } from './components/SettingsModal'
 import { CheckCircle, AlertCircle, X, Bell, PanelLeft, Settings } from 'lucide-react'
 
-// [수정됨] Toast: 등장/퇴장 애니메이션 로직 추가
+// Toast: 등장/퇴장 애니메이션 로직 추가
 function Toast({ message, visible, onClose, onOpenFolder }: { message: string, visible: boolean, onClose: () => void, onOpenFolder: () => void }) {
   const [shouldRender, setShouldRender] = useState(visible);
 
@@ -44,6 +44,9 @@ function WrappedApp() {
   const [errorMsg, setErrorMsg] = useState('')
   
   const [progress, setProgress] = useState(0)
+  
+  const progressRef = useRef(0);
+  
   const [showToast, setShowToast] = useState(false)
   const [downloadPath, setDownloadPath] = useState<string>('') 
   const [lastSavedPath, setLastSavedPath] = useState('')
@@ -66,7 +69,7 @@ function WrappedApp() {
     download: { defaultPath: '', defaultQuality: 'best', askLocation: false }
   });
 
-  // [신규] 스마트 붙여넣기 (Paste-to-Analyze)
+  // 스마트 붙여넣기 (Paste-to-Analyze)
   useEffect(() => {
     const handleGlobalPaste = async (e: ClipboardEvent) => {
       // 1. 입력창(input/textarea)에 포커스가 있으면 가로채지 않음 (기본 붙여넣기 허용)
@@ -142,9 +145,14 @@ function WrappedApp() {
   }, []);
 
   useEffect(() => {
-    const removeProgressListener = window.api.onDownloadProgress(setProgress)
+    const removeProgressListener = window.api.onDownloadProgress(({ id, progress }) => {
+        if (currentItem?.id === id) {
+            setProgress(progress);
+            progressRef.current = progress;
+        }
+    });
     return () => { removeProgressListener() }
-  }, [])
+  }, [currentItem]);
 
   useEffect(() => {
     if (isProcessing) return;
@@ -157,42 +165,65 @@ function WrappedApp() {
   const processNextItem = async (item: MediaItem) => {
     setIsProcessing(true);
     setCurrentItem(item);
-    setProgress(0);
+    
+    const startProgress = item.progress || 0;
+    setProgress(startProgress);
+    progressRef.current = startProgress;
+
     setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'downloading' } : q));
 
     try {
       await new Promise<void>((resolve) => {
         const cleanup = window.api.onDownloadComplete((res) => {
+          if (res.id !== item.id) return;
           cleanup();
-          if (res.success) {
-            const savedFile = res.filePath || '';
-            setLastSavedPath(savedFile);
-            addToHistory(item.title, item.thumbnail, savedFile, item.type);
-            addNotification('success', `다운로드 완료: ${item.title}`);
-            
-            // 토스트 표시 (애니메이션 적용됨)
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 4000);
+          
+          try {
+            if (res.success) {
+              const savedFile = res.filePath || '';
+              setLastSavedPath(savedFile);
+              addToHistory(item.title, item.thumbnail, savedFile, item.type);
+              addNotification('success', `다운로드 완료: ${item.title}`);
+              
+              setShowToast(true);
+              setTimeout(() => setShowToast(false), 4000);
 
-            setQueue(prev => prev.filter(q => q.id !== item.id));
-            resolve();
-          } else {
-            addNotification('error', `${item.title} 실패: ${res.error}`);
+              setQueue(prev => prev.filter(q => q.id !== item.id));
+              resolve();
+            } else if (res.isPaused) {
+              // [수정 #3 해결] progress(상태) 대신 progressRef.current(최신값) 사용
+              setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'stopped', progress: progressRef.current } : q));
+              resolve();
+            } else if (res.isCancelled) {
+              setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'fail' } : q));
+              addNotification('info', `다운로드가 취소되었습니다: ${item.title}`);
+              resolve();
+            } else {
+              addNotification('error', `${item.title} 실패: ${res.error}`);
+              setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'fail' } : q));
+              resolve();
+            }
+          } catch (error) {
+            console.error("Completion Error:", error);
+            // 에러가 나도 프로세스는 종료 처리
             setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'fail' } : q));
             resolve();
           }
         });
 
         window.api.startDownload({
+          id: item.id,
           url: item.url!,
           folder: item.folder || downloadPath,
           title: item.title,
           type: item.type,
           quality: item.quality === '최고화질' ? 'best' : item.quality,
-          audioFormat: item.audioFormat || 'mp3'
+          audioFormat: item.audioFormat || 'mp3',
+          includeThumbnail: item.includeThumbnail,
+          includeSubtitle: item.includeSubtitle,
+          subLanguage: item.subLanguage
         });
       });
-
     } catch (e) {
       console.error(e);
       setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'fail' } : q));
@@ -202,7 +233,32 @@ function WrappedApp() {
     }
   }
 
-  const addToHistory = (title: string, thumbnail: string, path: string, type: 'video' | 'audio') => {
+  const handlePauseItem = async (id: string) => {
+    await window.api.pauseDownload(id);
+    // 상태 업데이트는 onDownloadComplete(isPaused)에서 처리됨
+  };
+
+  const handleCancelItem = async (id: string) => {
+    await window.api.cancelDownload(id);
+    // 상태 업데이트는 onDownloadComplete(isCancelled)에서 처리됨
+  };
+
+  // 재시작 (처음부터 다시)
+  const handleRetryItem = (id: string) => {
+      // 상태를 waiting으로 바꾸면 useEffect가 감지하여 processNextItem 실행
+      setQueue(prev => prev.map(q => q.id === id ? { ...q, status: 'waiting' } : q));
+  };
+
+  // 플로팅 바의 Resume 버튼용 (멈춘 첫 번째 항목 재개)
+  const handleResumeFirst = () => {
+      // 재개 시에는 '진행률이 있는' 멈춘 항목 우선, 없으면 그냥 멈춘 항목
+      const stoppedItem = queue.find(q => q.status === 'stopped' && (q.progress || 0) > 0) || queue.find(q => q.status === 'stopped');
+      if (stoppedItem) {
+          handleRetryItem(stoppedItem.id);
+      }
+  };
+
+  const addToHistory = (title: string, thumbnail: string, path: string, type: 'video' | 'audio' | 'thumbnail' | 'subtitle') => {
     const newItem: MediaItem = {
         id: Date.now().toString(),
         title, thumbnail, date: new Date().toLocaleDateString(), filePath: path, type
@@ -256,7 +312,7 @@ function WrappedApp() {
     }
   }
 
-  const handleDownload = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
+  const handleDownload = async (options: any) => {
     let targetFolder = '';
     if (appSettings.download.askLocation) {
       const selected = await window.api.selectFolder();
@@ -270,7 +326,7 @@ function WrappedApp() {
     addQueueItem(options, 'waiting', targetFolder);
   }
 
-  const handleAddToQueue = async (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }) => {
+  const handleAddToQueue = async (options: any) => {
     let targetFolder = '';
     if (appSettings.download.askLocation) {
       const selected = await window.api.selectFolder();
@@ -280,11 +336,16 @@ function WrappedApp() {
     addQueueItem(options, 'stopped', targetFolder);
   }
 
-  const addQueueItem = (options: { type: 'video' | 'audio'; quality: string; audioFormat: string }, initialStatus: 'waiting' | 'stopped', folderPath?: string) => {
+  const addQueueItem = (options: any, initialStatus: 'waiting' | 'stopped', folderPath?: string) => {
     if (!videoData) return;
+    
+    let titlePrefix = '';
+    if (options.type === 'thumbnail') titlePrefix = '[썸네일] ';
+    if (options.type === 'subtitle') titlePrefix = '[대본] '; // '자막' -> '대본' (기획 의도 반영)
+
     const newItem: MediaItem = {
       id: Date.now().toString(),
-      title: videoData.title,
+      title: titlePrefix + videoData.title,
       thumbnail: videoData.thumbnail,
       type: options.type,
       quality: options.quality === 'best' ? '최고화질' : options.quality,
@@ -292,13 +353,22 @@ function WrappedApp() {
       folder: folderPath || downloadPath || appSettings.download.defaultPath || '', 
       url: currentUrl,
       status: initialStatus,
-      resolutions: videoData.resolutions
+      resolutions: videoData.resolutions,
+      includeThumbnail: options.includeThumbnail,
+      includeSubtitle: options.includeSubtitle,
+      // 언어 저장
+      subLanguage: options.subLanguage || 'ko' 
     }
     setQueue(prev => [...prev, newItem])
+    
     if (initialStatus === 'stopped') {
-      addNotification('info', '대기열에 추가되었습니다. (일시 정지됨)')
+       addNotification('info', '대기열에 추가되었습니다.')
     } else {
-      addNotification('info', '다운로드 대기열에 추가되었습니다.')
+       if (options.type === 'thumbnail' || options.type === 'subtitle') {
+          addNotification('info', `${options.type === 'thumbnail' ? '썸네일' : '대본'} 저장을 시작합니다.`);
+       } else {
+          addNotification('info', '다운로드 대기열에 추가되었습니다.')
+       }
     }
   }
 
@@ -308,10 +378,6 @@ function WrappedApp() {
 
   const handleDownloadAll = () => {
     setQueue(prev => prev.map(q => (q.status === 'stopped' || q.status === 'fail') ? { ...q, status: 'waiting' } : q));
-  }
-
-  const handleStartItem = (id: string) => {
-    setQueue(prev => prev.map(item => item.id === id ? { ...item, status: 'waiting' } : item));
   }
 
   const handleOpenFolder = (path?: string) => window.api.showInFolder(path || lastSavedPath)
@@ -330,6 +396,14 @@ function WrappedApp() {
     if (item.url) setCurrentUrl(item.url);
     setStatus('success');
   }
+
+  const activeStoppedItem = queue.find(q => q.status === 'stopped' && (q.progress || 0) > 0);
+  const shouldShowFloating = isProcessing || !!activeStoppedItem;
+
+  const activeTitle = currentItem?.title || activeStoppedItem?.title || '';
+
+  const waitingOrNewStoppedCount = queue.filter(q => q.status === 'waiting' || (q.status === 'stopped' && (q.progress || 0) === 0)).length;
+  const currentCount = queue.length - waitingOrNewStoppedCount;
 
   return (
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
@@ -377,15 +451,20 @@ function WrappedApp() {
           onClose={() => setShowToast(false)} 
           onOpenFolder={() => handleOpenFolder()} 
         />
-
-        <FloatingStatus 
-          isDownloading={isProcessing} 
-          title={currentItem?.title || '다운로드 중...'} 
-          progress={progress}
-          current={queue.length > 0 ? queue.length - queue.filter(q => q.status === 'waiting' || q.status === 'stopped').length : 0}
-          total={queue.length}
-          isDrawerOpen={isQueueOpen} 
-        />
+        {shouldShowFloating && (
+          <FloatingStatus 
+            isDownloading={isProcessing} 
+            title={activeTitle}
+            progress={isProcessing ? progress : (activeStoppedItem?.progress || 0)} 
+            // [수정 #2 적용] 보정된 순번 전달
+            current={currentCount}
+            total={queue.length}
+            isDrawerOpen={isQueueOpen} 
+            onPause={() => currentItem && handlePauseItem(currentItem.id)}
+            onCancel={() => currentItem && handleCancelItem(currentItem.id)}
+            onResume={handleResumeFirst}
+          />
+        )}
 
         <div className="flex-1 flex flex-col items-center px-6 py-12 overflow-y-auto pb-40">
           <div className="mb-8 w-full max-w-2xl flex flex-col items-center mt-4">
@@ -395,7 +474,7 @@ function WrappedApp() {
           <InputArea 
             onAnalyze={handleAnalyze} 
             isLoading={status === 'loading'} 
-            // [수정] App의 상태를 주입하여 동기화
+            // App의 상태를 주입하여 동기화
             value={currentUrl}
             onChange={setCurrentUrl}
           />
@@ -429,9 +508,11 @@ function WrappedApp() {
           onSelectFolder={handleSelectFolder}
           editingId={editingId}
           setEditingId={setEditingId}
-          onStartItem={handleStartItem}
-          isOpen={isQueueOpen} 
-          onToggle={setIsQueueOpen} 
+          onStartItem={handleRetryItem} // 대기/실패 상태일 때 시작 -> 재시도
+          onPauseItem={handlePauseItem}
+          onCancelItem={handleCancelItem}
+          isOpen={isQueueOpen}
+          onToggle={setIsQueueOpen}
         />
         
         <SettingsModal 

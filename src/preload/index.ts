@@ -2,39 +2,50 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
 const api = {
-  // [신규] 설정 관련 API
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSetting: (key: string, value: any) => ipcRenderer.invoke('set-setting', key, value),
   setSettings: (settings: any) => ipcRenderer.invoke('set-settings', settings),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),
 
-  // 1. 영상 정보 가져오기
   getVideoInfo: (url: string) => ipcRenderer.invoke('get-video-info', url),
   
-  // 2. 다운로드 시작 요청
   startDownload: (params: any) => ipcRenderer.invoke('start-download', params),
-  selectFolder: () => ipcRenderer.invoke('select-folder'),
+  // [신규] 제어 함수 연결
+  pauseDownload: (id: string) => ipcRenderer.invoke('pause-download', id),
+  cancelDownload: (id: string) => ipcRenderer.invoke('cancel-download', id),
 
-  // 3. 진행률 리스너 (Main -> Renderer)
-  onDownloadProgress: (callback: (progress: number) => void) => {
-    const subscription = (_: any, progress: number) => callback(progress);
+  selectFolder: () => ipcRenderer.invoke('select-folder'),
+  selectFile: () => ipcRenderer.invoke('select-file'),
+
+  // [신규] D&D 파일 경로 추출
+  getFilePath: (file: File) => {
+      // @ts-ignore
+      return window.electron.webUtils.getPathForFile(file);
+  },
+
+  onDownloadProgress: (callback: (data: { id: string, progress: number }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('download-progress', subscription);
     return () => ipcRenderer.removeListener('download-progress', subscription);
   },
 
-  // 4. 완료 리스너
-  onDownloadComplete: (callback: (result: { success: boolean; error?: string }) => void) => {
+  onDownloadComplete: (callback: (result: any) => void) => {
     const subscription = (_: any, result: any) => callback(result);
     ipcRenderer.on('download-complete', subscription);
     return () => ipcRenderer.removeListener('download-complete', subscription);
   },
 
-  // [신규 추가]
   showInFolder: (path: string) => ipcRenderer.invoke('show-in-folder', path),
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
   resizeWindow: (height: number) => ipcRenderer.invoke('resize-window', height),
 
-  // [신규] 업데이트 관련
+  startConvert: (params: any) => ipcRenderer.invoke('start-convert', params),
+  onConvertProgress: (callback: (data: { fileId: string, progress: number }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('convert-progress', subscription);
+    return () => ipcRenderer.removeListener('convert-progress', subscription);
+  },
+
   onUpdateAvailable: (callback: () => void) => {
     const subscription = (_: any) => callback();
     ipcRenderer.on('update-available', subscription);

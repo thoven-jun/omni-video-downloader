@@ -40,21 +40,21 @@ function createWindow(): void {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
 
-  let width = 1280;
-  let height = 840;
+  let width = 1360;
+  let height = 960;
 
   // 작은 화면 대응
-  if (screenWidth < 1300) width = 1024;
-  if (screenHeight < 900) height = 700;
+  if (screenWidth < 1400) width = 1280;
+  if (screenHeight < 1000) height = 800;
 
   const mainWindow = new BrowserWindow({
     width: width,
     height: height,
-    minWidth: 1024, // 최소 너비 설정
-    minHeight: 600, // 최소 높이 설정
+    minWidth: 1100, // 최소 너비 설정
+    minHeight: 720, // 최소 높이 설정
     show: false,
     autoHideMenuBar: true,
-    resizable: false, // 기본적으로 고정
+    resizable: true, // 기본적으로 고정
     maximizable: false,
     fullscreenable: false,
     backgroundColor: '#111827',

@@ -1,4 +1,4 @@
-export type Platform = 'youtube' | 'instagram' | 'tiktok' | 'twitter' | 'unknown';
+export type Platform = 'youtube' | 'instagram' | 'tiktok' | 'twitter' | 'twitch' | 'other';
 
 export const detectPlatform = (url: string): Platform => {
   const domain = url.toLowerCase();
@@ -6,13 +6,16 @@ export const detectPlatform = (url: string): Platform => {
   if (domain.includes('instagram.com')) return 'instagram';
   if (domain.includes('tiktok.com')) return 'tiktok';
   if (domain.includes('twitter.com') || domain.includes('x.com')) return 'twitter';
-  return 'unknown';
+  if (domain.includes('twitch.tv')) return 'twitch';
+  return 'other';
 };
 
 export const isValidUrl = (url: string): boolean => {
   try {
-    new URL(url);
-    return detectPlatform(url) !== 'unknown';
+    const parsed = new URL(url);
+    // [수정] http, https 프로토콜을 사용하는 모든 URL을 허용
+    // yt-dlp가 1000개 이상의 사이트를 지원하므로 굳이 막을 필요가 없음
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch (e) {
     return false;
   }
